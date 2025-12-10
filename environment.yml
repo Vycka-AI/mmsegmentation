@@ -1,4 +1,4 @@
-name: mmseg
+name: mmseg_env
 channels:
   - defaults
   - nvidia
