@@ -1,0 +1,89 @@
+# Save this file as: ~/mm_segment/mmsegmentation/configs/my_nyu_config.py
+
+# --- 1. Inherit the basics ---
+_base_ = [
+    './_base_/models/pspnet_r50-d8.py',     # The PSPNet model
+    './_base_/default_runtime.py',         # Logging, checkpoints, etc.
+    './_base_/schedules/schedule_80k.py'  # 80k iterations
+]
+
+# --- 2. Define Dataset Info ---
+data_root = 'data/nyu'
+dataset_type = 'BaseSegDataset' # Use the generic dataset class
+crop_size = (480, 480)
+
+# --- 3. Modify Model Config (THE FIX IS HERE) ---
+# We modify keys *within* the inherited 'model' dict from the _base_
+model = dict(
+    # This adds the size_divisor to the model's data_preprocessor
+    data_preprocessor=dict(
+        type='SegDataPreProcessor',
+        mean=[123.675, 116.28, 103.53],
+        std=[58.395, 57.12, 57.375],
+        bgr_to_rgb=True,
+        pad_val=0,
+        seg_pad_val=255,
+        size_divisor=32  # <-- THIS IS THE FIX
+    ),
+    pretrained='open-mmlab://resnet50_v1c',
+    decode_head=dict(num_classes=13),
+    auxiliary_head=dict(num_classes=13)
+)
+
+# --- 4. Define Pipelines ---
+train_pipeline = [
+    dict(type='LoadImageFromFile'),
+    dict(type='LoadAnnotations'),
+    dict(
+        type='RandomResize',
+        scale=(640, 480), 
+        ratio_range=(0.5, 2.0),
+        keep_ratio=True),
+    dict(type='RandomCrop', crop_size=crop_size, cat_max_ratio=0.75),
+    dict(type='RandomFlip', prob=0.5),
+    dict(type='PackSegInputs')
+]
+
+test_pipeline = [
+    dict(type='LoadImageFromFile'),
+    dict(type='Resize', scale=(640, 480), keep_ratio=True),
+    dict(type='LoadAnnotations'),
+    dict(type='PackSegInputs')
+]
+
+# --- 5. Define Dataloaders ---
+train_dataloader = dict(
+    batch_size=4, # Adjust to your GPU memory
+    num_workers=4,
+    persistent_workers=True,
+    sampler=dict(type='InfiniteSampler', shuffle=True),
+    dataset=dict(
+        type=dataset_type,
+        data_root=data_root,
+        data_prefix=dict(
+            img_path='images/training',
+            seg_map_path='annotations/training'),
+        img_suffix='.png',     # We saved images as .png
+        seg_map_suffix='.png', # We saved annotations as .png
+        pipeline=train_pipeline))
+
+val_dataloader = dict(
+    batch_size=1,
+    num_workers=4,
+    persistent_workers=True,
+    sampler=dict(type='DefaultSampler', shuffle=False),
+    dataset=dict(
+        type=dataset_type,
+        data_root=data_root,
+        data_prefix=dict(
+            img_path='images/validation',
+            seg_map_path='annotations/validation'),
+        img_suffix='.png',     # We saved images as .png
+        seg_map_suffix='.png', # We saved annotations as .png
+        pipeline=test_pipeline))
+
+test_dataloader = val_dataloader
+
+# --- 6. Define Evaluator ---
+val_evaluator = dict(type='IoUMetric', iou_metric='mIoU')
+test_evaluator = val_evaluator

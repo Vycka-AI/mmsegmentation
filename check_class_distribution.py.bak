@@ -1,0 +1,93 @@
+import os
+import numpy as np
+from PIL import Image
+from tqdm import tqdm
+from tabulate import tabulate # Optional: pip install tabulate, or I'll use simple formatting
+
+# --- Configuration ---
+CLASSES = {
+    0: "Background",
+    1: "Person",
+    2: "Chair",
+    3: "Diningtable"
+}
+
+# Define the datasets to check
+DATASETS = [
+    {
+        "name": "TRAINING SET",
+        "list_path": "data/VOCdevkit/VOC2012/ImageSets/Segmentation/train_3class.txt",
+        "mask_dir": "data/VOCdevkit/VOC2012/SegmentationClass4Class_Train"
+    },
+    {
+        "name": "VALIDATION SET",
+        "list_path": "data/VOCdevkit/VOC2012/ImageSets/Segmentation/val_3class.txt",
+        "mask_dir": "data/VOCdevkit/VOC2012/SegmentationClass4Class_Val"
+    }
+]
+
+def analyze_dataset(dataset_info):
+    print(f"\n--- Analyzing {dataset_info['name']} ---")
+    
+    list_path = dataset_info["list_path"]
+    mask_dir = dataset_info["mask_dir"]
+
+    if not os.path.exists(list_path):
+        print(f"Error: File list not found: {list_path}")
+        return
+
+    with open(list_path, 'r') as f:
+        files = [x.strip() for x in f.readlines()]
+
+    print(f"Scanning {len(files)} images...")
+
+    # Initialize counters
+    # count_images: How many images contain at least one pixel of this class
+    # count_pixels: Total number of pixels for this class
+    class_stats = {k: {'images': 0, 'pixels': 0} for k in CLASSES.keys()}
+    
+    # Also track '255' (Ignore)
+    class_stats[255] = {'images': 0, 'pixels': 0}
+
+    for file_name in tqdm(files):
+        mask_path = os.path.join(mask_dir, file_name + ".png")
+        
+        try:
+            mask = Image.open(mask_path)
+            mask_arr = np.array(mask)
+        except FileNotFoundError:
+            print(f"Warning: Missing mask {mask_path}")
+            continue
+
+        # Get unique values and counts in this image
+        unique, counts = np.unique(mask_arr, return_counts=True)
+        
+        for val, count in zip(unique, counts):
+            if val in class_stats:
+                class_stats[val]['pixels'] += count
+                class_stats[val]['images'] += 1
+            else:
+                # Found a weird label not in 0-3 or 255?
+                print(f"Warning: Found unexpected class ID {val} in {file_name}")
+
+    # Print Results
+    print(f"\nResults for {dataset_info['name']}:")
+    print(f"{'ID':<5} {'Class Name':<15} {'Images (Count)':<15} {'Images (%)':<15} {'Total Pixels':<15}")
+    print("-" * 70)
+    
+    total_imgs = len(files)
+    
+    for cls_id in sorted(CLASSES.keys()):
+        name = CLASSES[cls_id]
+        imgs = class_stats[cls_id]['images']
+        pct = (imgs / total_imgs) * 100 if total_imgs > 0 else 0
+        pixels = class_stats[cls_id]['pixels']
+        print(f"{cls_id:<5} {name:<15} {imgs:<15} {pct:<15.2f}% {pixels:<15}")
+
+    print("-" * 70)
+    # Optional: Show Ignore stats
+    print(f"255   Ignore/Void     {class_stats[255]['images']:<15} {(class_stats[255]['images']/total_imgs)*100:<15.2f}% {class_stats[255]['pixels']:<15}")
+
+if __name__ == "__main__":
+    for ds in DATASETS:
+        analyze_dataset(ds)

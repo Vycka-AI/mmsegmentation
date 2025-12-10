@@ -1,0 +1,161 @@
+# --- 1. Inherit basics ---
+# Ensure these paths exist in your mmseg folder structure
+_base_ = [
+    './_base_/models/pspnet_r50-d8.py',
+    './_base_/default_runtime.py',
+    './_base_/schedules/schedule_20k.py'
+]
+
+# --- 2. Define Our 7 Classes ---
+# IDs: 0=Back, 1=Chair, 2=Table, 3=Person, 4=Plant, 5=Sofa, 6=TV
+metainfo = dict(
+    classes=('background', 'chair', 'diningtable', 'person', 
+             'pottedplant', 'sofa', 'tv_monitor'),
+    # RGB Colors for visualization
+    palette=[
+        [0, 0, 0],       # Background (Black)
+        [255, 0, 0],     # Chair (Red)
+        [0, 255, 0],     # Dining Table (Green)
+        [0, 0, 255],     # Person (Blue)
+        [255, 255, 0],   # Potted Plant (Yellow)
+        [255, 0, 255],   # Sofa (Magenta)
+        [0, 255, 255]    # TV/Monitor (Cyan)
+    ]
+)
+
+# --- 3. Model Config ---
+model = dict(
+    data_preprocessor=dict(
+        type='SegDataPreProcessor',
+        mean=[123.675, 116.28, 103.53],
+        std=[58.395, 57.12, 57.375],
+        bgr_to_rgb=True,
+        pad_val=0,
+        seg_pad_val=255,
+        size_divisor=32),
+    pretrained='open-mmlab://resnet50_v1c',
+    decode_head=dict(
+        num_classes=7,
+        ignore_index=255,
+        
+        # --- THE FIX: OHEM Sampler ---
+        # This forces the model to train on the "hardest" 100,000 pixels per batch.
+        # Since Background is "easy", the model will focus on Person/Chair automatically.
+        sampler=dict(type='OHEMPixelSampler', thresh=0.7, min_kept=100000),
+        
+        loss_decode=dict(
+            type='CrossEntropyLoss', 
+            use_sigmoid=False, 
+            loss_weight=1.0, 
+            # NO class_weight here (prevents crash)
+            avg_non_ignore=True)
+    ),
+    auxiliary_head=dict(
+        num_classes=7,
+        ignore_index=255,
+        loss_decode=dict(
+            type='CrossEntropyLoss', 
+            use_sigmoid=False, 
+            loss_weight=0.4,
+            avg_non_ignore=True))
+)
+# --- 4. Pipelines ---
+dataset_type = 'BaseSegDataset'
+data_root = 'data/VOC_Project_Merged' # Pointing to your merged folder
+
+train_pipeline = [
+    dict(type='LoadImageFromFile'),
+    dict(type='LoadAnnotations'),
+    dict(type='RandomResize', scale=(2048, 512), ratio_range=(0.5, 2.0), keep_ratio=True),
+    dict(type='RandomCrop', crop_size=(512, 512), cat_max_ratio=0.75),
+    dict(type='RandomFlip', prob=0.5),
+    dict(type='PackSegInputs')
+]
+
+test_pipeline = [
+    dict(type='LoadImageFromFile'),
+    dict(type='Resize', scale=(2048, 512), keep_ratio=True),
+    dict(type='LoadAnnotations'),
+    dict(type='PackSegInputs')
+]
+
+# --- 5. Dataloaders ---
+train_dataloader = dict(
+    batch_size=2, # Adjust based on your GPU VRAM (4-8 is good for 512x512)
+    num_workers=2,
+    persistent_workers=True,
+    sampler=dict(type='InfiniteSampler', shuffle=True),
+    dataset=dict(
+        type=dataset_type,
+        data_root=data_root,
+        data_prefix=dict(
+            img_path='JPEGImages',
+            # Point to the NEW mapped folder from Step 1
+            seg_map_path='SegmentationClass_Custom'), 
+        ann_file='train_final_large_filtered.txt', # Your generated list
+        img_suffix='.jpg',
+        seg_map_suffix='.png',
+        pipeline=train_pipeline,
+        metainfo=metainfo,
+        reduce_zero_label=False # We already mapped 0 to background manually
+    ))
+
+# FOR VALIDATION: 
+# Ideally, use the original VOC2007 Test set. 
+# If you don't have it separate, we can use a subset of training or point to VOC2007 path.
+# Assuming you want to validate on the same folder structure for now:
+val_dataloader = dict(
+    batch_size=1,
+    num_workers=2,
+    persistent_workers=True,
+    sampler=dict(type='DefaultSampler', shuffle=False),
+    dataset=dict(
+        type=dataset_type,
+        data_root=data_root,
+        data_prefix=dict(
+            img_path='JPEGImages',
+            seg_map_path='SegmentationClass_Custom'),
+        # NOTE: You need a separate validation list. 
+        # If you don't have one, duplicate 'train_combined.txt' temporarily 
+        # or create a 'val.txt' with 100 lines from it.
+        ann_file='val_large_filtered.txt', 
+        img_suffix='.jpg',
+        seg_map_suffix='.png',
+        pipeline=test_pipeline,
+        metainfo=metainfo,
+        reduce_zero_label=False
+    ))
+
+test_dataloader = val_dataloader
+
+# --- 6. Evaluator ---
+val_evaluator = dict(type='IoUMetric', iou_metric='mIoU')
+test_evaluator = val_evaluator
+
+# --- 7. Optimization ---
+optim_wrapper = dict(
+    type='AmpOptimWrapper',
+    optimizer=dict(lr=0.01, momentum=0.9, type='SGD', weight_decay=0.0005),
+    loss_scale='dynamic'
+)
+
+# --- 8. Hooks & Runtime ---
+default_hooks = dict(
+    timer=dict(type='IterTimerHook'),
+    logger=dict(type='LoggerHook', interval=50, log_metric_by_epoch=False),
+    param_scheduler=dict(type='ParamSchedulerHook'),
+    checkpoint=dict(type='CheckpointHook', by_epoch=False, interval=1000, save_best='mIoU'),
+    sampler_seed=dict(type='DistSamplerSeedHook'),
+    visualization=dict(type='SegVisualizationHook')
+)
+
+train_cfg = dict(type='IterBasedTrainLoop', max_iters=50000, val_interval=1000)
+val_cfg = dict(type='ValLoop')
+test_cfg = dict(type='TestLoop')
+
+vis_backends = [dict(type='LocalVisBackend'), dict(type='TensorboardVisBackend')]
+visualizer = dict(
+    type='SegLocalVisualizer', 
+    vis_backends=vis_backends, 
+    name='visualizer'
+)
