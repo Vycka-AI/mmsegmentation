@@ -61,3 +61,20 @@ pip install -v -e .
 ```shell
 pip install "mmsegmentation>=1.0.0"
 ```
+
+## 2. Training
+
+**Creating train test splits**
+
+First 
+```shell
+#First create splits
+cd data
+python create_splits.py
+```
+
+**Run training**
+To run training:
+```shell
+python tools/train.py configs/3_Class.py --work-dir work_dirs/3_Class_Debug
+```
