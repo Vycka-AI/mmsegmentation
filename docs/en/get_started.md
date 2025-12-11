@@ -14,8 +14,8 @@ If you are experienced with PyTorch and have already installed it, just skip thi
 **Step 1.** Create a conda environment and activate it.
 
 ```shell
-conda create --name openmmlab python=3.8 -y
-conda activate openmmlab
+conda create --name mm_env python=3.10 -y
+conda activate mm_env
 ```
 
 **Step 2.** Install PyTorch following [official instructions](https://pytorch.org/get-started/locally/), e.g.
@@ -48,10 +48,7 @@ mim install "mmcv>=2.0.0"
 
 **Step 1.** Install MMSegmentation.
 
-Case a: If you develop and run mmseg directly, install it from source:
-
 ```shell
-git clone -b main https://github.com/open-mmlab/mmsegmentation.git
 cd mmsegmentation
 pip install -v -e .
 # '-v' means verbose, or more output
@@ -59,62 +56,9 @@ pip install -v -e .
 # thus any local modifications made to the code will take effect without reinstallation.
 ```
 
-Case b: If you use mmsegmentation as a dependency or third-party package, install it with pip:
-
 ```shell
 pip install "mmsegmentation>=1.0.0"
 ```
-
-### Verify the installation
-
-To verify whether MMSegmentation is installed correctly, we provide some sample codes to run an inference demo.
-
-**Step 1.** We need to download config and checkpoint files.
-
-```shell
-mim download mmsegmentation --config pspnet_r50-d8_4xb2-40k_cityscapes-512x1024 --dest .
-```
-
-The downloading will take several seconds or more, depending on your network environment. When it is done, you will find two files `pspnet_r50-d8_4xb2-40k_cityscapes-512x1024.py` and `pspnet_r50-d8_512x1024_40k_cityscapes_20200605_003338-2966598c.pth` in your current folder.
-
-**Step 2.** Verify the inference demo.
-
-Option (a). If you install mmsegmentation from source, just run the following command.
-
-```shell
-python demo/image_demo.py demo/demo.png configs/pspnet/pspnet_r50-d8_4xb2-40k_cityscapes-512x1024.py pspnet_r50-d8_512x1024_40k_cityscapes_20200605_003338-2966598c.pth --device cuda:0 --out-file result.jpg
-```
-
-You will see a new image `result.jpg` on your current folder, where segmentation masks are covered on all objects.
-
-Option (b). If you install mmsegmentation with pip, open you python interpreter and copy&paste the following codes.
-
-```python
-from mmseg.apis import inference_model, init_model, show_result_pyplot
-import mmcv
-
-config_file = 'pspnet_r50-d8_4xb2-40k_cityscapes-512x1024.py'
-checkpoint_file = 'pspnet_r50-d8_512x1024_40k_cityscapes_20200605_003338-2966598c.pth'
-
-# build the model from a config file and a checkpoint file
-model = init_model(config_file, checkpoint_file, device='cuda:0')
-
-# test a single image and show the results
-img = 'demo/demo.png'  # or img = mmcv.imread(img), which will only load it once
-result = inference_model(model, img)
-# visualize the results in a new window
-show_result_pyplot(model, img, result, show=True)
-# or save the visualization results to image files
-# you can change the opacity of the painted segmentation map in (0, 1].
-show_result_pyplot(model, img, result, show=True, out_file='result.jpg', opacity=0.5)
-# test a video and show the results
-video = mmcv.VideoReader('video.mp4')
-for frame in video:
-   result = inference_model(model, frame)
-   show_result_pyplot(model, frame, result, wait_time=1)
-```
-
-You can modify the code above to test a single image or a video, both of these options can verify that the installation was successful.
 
 ### Customize Installation
 
