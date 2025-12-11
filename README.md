@@ -10,7 +10,7 @@ git clone https://github.com/Vycka-AI/mmsegmentation
 
 Then, prepare the environment using Conda.
 
-```bash
+
 **Step 0.** Download and install Miniconda from the [official website](https://docs.conda.io/en/latest/miniconda.html).
 
 **Step 1.** Create a conda environment and activate it.
