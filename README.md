@@ -64,12 +64,23 @@ pip install "mmsegmentation>=1.0.0"
 
 ## 2. Training
 
-**Creating train test splits**
+###Getting Data
+```shell
+cd mmsegmentation
+mkdir data && cd data
+#Copy your data here and unzip it
+cp /eirt_output.zip . #Just an example
+unzip eirt_output.zip
+```
 
-First 
+###**Creating train test splits**
+
+Copy "create_splits.py" file to eirt_output folder
 ```shell
 #First create splits
-cd data
+cd mmsegmentation
+cp create_splits.py data/eirt_output/batch01/
+cd data/eirt_output/batch01/
 python create_splits.py
 ```
 
@@ -77,4 +88,11 @@ python create_splits.py
 To run training:
 ```shell
 python tools/train.py configs/3_Class.py --work-dir work_dirs/3_Class_Debug
+```
+
+## 3. Inference
+To test out images, currently it reads some of the images from "'data/real/val.txt'". Change it accordingly to your work directory.
+
+```shell
+python inference_3Class.py
 ```
