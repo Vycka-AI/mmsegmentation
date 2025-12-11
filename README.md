@@ -8,7 +8,7 @@ First, clone the repository:
 git clone https://github.com/Vycka-AI/mmsegmentation
 ```
 
-First, prepare the environment using the provided Conda configuration file.
+Then, prepare the environment using Conda.
 
 ```bash
 # Create the conda environment
